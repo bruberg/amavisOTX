@@ -7,7 +7,9 @@ use Sys::Syslog;
 use Digest::file qw (digest_file_hex);
 
 
-use vars qw ($argument $inputfilename $inputdir $hashfilename %md5hashes %sha1hashes);
+use vars qw ($argument $inputfilename $inputdir $hashfilename);
+
+$hashfilename = "/var/tmp/known_hashes.txt";
 
 $inputdir = "";
 $inputfilename = "";
@@ -28,62 +30,68 @@ if (@ARGV) {
   exit 0
 }
 
-$hashfilename = "/var/tmp/known_hashes.txt";
-%md5hashes = ();
-%sha1hashes = ();
-
-open (HASHES, "<", $hashfilename);
-while (my $line = <HASHES>) {
-  chomp $line;
-  my ($hashtype, $hash, $pulse) = split (/:/, $line);
-  if ($hashtype eq '{MD5}') {
-    $md5hashes{$hash} = {
-			 'pulse' => $pulse,
-			};
-  };
-  if ($hashtype eq '{SHA1}') {
-    $sha1hashes{$hash} = {
-			  'pulse' => $pulse,
-			 };
-  };
-};
-close HASHES;
+sub read_datafile {
+  my ($hashfilename) = @_;
+  open(HASHES, "<", $hashfilename) || die ("Unable to read $hashfilename: $!");
+  my %md5hashes;
+  my %sha1hashes;
+  while (my $line = <HASHES>) {
+    chomp ($line);
+    my ($hashtype, $hash, $pulse ) = split (/:/, $line);
+    if ('{$MD5}' eq $hashtype) {
+      $md5hashes{$hash}=$pulse;
+    } elsif ('{SHA1}' eq $hashtype) {
+      $sha1hashes{$hash}=$pulse;
+    }
+  }
+  close (HASHES);
+  return (\%md5hashes, \%sha1hashes);
+}
 
 sub checkfile () {
-  my $file = shift;
-  
-  openlog ("AmavisOTX[$$]", 'ndelay', 'mail');
+  my ($file, %md5hashes, %sha1hashes) = @_;
   if (-f $file && -r $file && -s $file) {
     my $md5sum = digest_file_hex ($file, 'MD5');
     if ($md5hashes{$md5sum}) {
-      print "Found hash from https://otx.alienvault.com/pulse/", $md5hashes{$md5sum}{'pulse'}, "/ in ${file}\n";
-      syslog ('notice', "Found MD5 hash (https://otx.alienvault.com/pulse/", $md5hashes{$md5sum}{'pulse'}, "/) in ${file}");
+      print "Found hash from https://otx.alienvault.com/pulse/", $md5hashes{$md5sum}, "/ in ${file}\n";
+      syslog ('notice', "Found MD5 hash (https://otx.alienvault.com/pulse/", $md5hashes{$md5sum}, "/) in ${file}");
       return 1;
     } else {
       my $sha1sum = digest_file_hex ($file, 'SHA-1');
       if ($sha1hashes{$sha1sum}) {
-	print "Found hash from https://otx.alienvault.com/pulse/", $sha1hashes{$sha1sum}{'pulse'}, "/ in ${file}\n";
-	syslog ('notice', "Found SHA1 hash (https://otx.alienvault.com/pulse/", $md5hashes{$md5sum}{'pulse'}, "/) in ${file}");
+	print "Found hash from https://otx.alienvault.com/pulse/", $sha1hashes{$sha1sum}, "/ in ${file}\n";
+	syslog ('notice', "Found SHA1 hash (https://otx.alienvault.com/pulse/", $md5hashes{$md5sum}, "/) in ${file}");
 	return 1;
       }
     }
   }
   print "OK: No malicious hash identified in $file\n";
   syslog ('notice', "OK: No malicious hash identified in ${file}");
-  closelog ();
+  return 0;
 }
 
 my $returncode = 0;
+
+# Read hashes
+my (%md5hashes, %sha1hashes) = read_datafile ($hashfilename);
+
+# Open syslog channel
+openlog ("AmavisOTX[$$]", 'ndelay', 'mail');
+
+# Read input file or directory that should be checked
 if ($inputdir) {
   opendir (DIR, $inputdir) or die $!;
   while (my $file = readdir(DIR)) {
     if ($file ne '.' && $file ne '..') {
-      $returncode = &checkfile ("${inputdir}/${file}");
+      $returncode = checkfile ("${inputdir}/${file}", %md5hashes, %sha1hashes);
     }
   }
   close DIR;
 } elsif ($inputfilename) {
-  $returncode = &checkfile ($inputfilename);
+  $returncode = &checkfile ($inputfilename, %md5hashes, %sha1hashes);
 }
+
+# Close syslog channel
+closelog ();
 
 exit $returncode;
