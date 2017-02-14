@@ -1,0 +1,89 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+use POSIX qw(strftime);
+use Sys::Syslog;
+use Digest::file qw (digest_file_hex);
+
+
+use vars qw ($argument $inputfilename $inputdir $hashfilename %md5hashes %sha1hashes);
+
+$inputdir = "";
+$inputfilename = "";
+
+if (@ARGV) {
+  if ($ARGV[0]) {
+    $argument = $ARGV[0];
+    if (-d $argument) {
+      $inputdir = $argument;
+    } elsif (-f $argument) {
+      $inputfilename = $argument;
+    }
+    exit 2 unless (-f $inputfilename or -d $inputdir);
+  }
+} else {
+  print "Usage: $0 file_or_directory_to_check\n";
+  print "Will report on known hashes\n";
+  exit 0
+}
+
+$hashfilename = "/var/tmp/known_hashes.txt";
+%md5hashes = ();
+%sha1hashes = ();
+
+open (HASHES, "<", $hashfilename);
+while (my $line = <HASHES>) {
+  chomp $line;
+  my ($hashtype, $hash, $pulse) = split (/:/, $line);
+  if ($hashtype eq '{MD5}') {
+    $md5hashes{$hash} = {
+			 'pulse' => $pulse,
+			};
+  };
+  if ($hashtype eq '{SHA1}') {
+    $sha1hashes{$hash} = {
+			  'pulse' => $pulse,
+			 };
+  };
+};
+close HASHES;
+
+sub checkfile () {
+  my $file = shift;
+  
+  openlog ("AmavisOTX[$$]", 'ndelay', 'mail');
+  if (-f $file && -r $file && -s $file) {
+    my $md5sum = digest_file_hex ($file, 'MD5');
+    if ($md5hashes{$md5sum}) {
+      print "Found hash from https://otx.alienvault.com/pulse/", $md5hashes{$md5sum}{'pulse'}, "/ in ${file}\n";
+      syslog ('notice', "Found MD5 hash (https://otx.alienvault.com/pulse/", $md5hashes{$md5sum}{'pulse'}, "/) in ${file}");
+      return 1;
+    } else {
+      my $sha1sum = digest_file_hex ($file, 'SHA-1');
+      if ($sha1hashes{$sha1sum}) {
+	print "Found hash from https://otx.alienvault.com/pulse/", $sha1hashes{$sha1sum}{'pulse'}, "/ in ${file}\n";
+	syslog ('notice', "Found SHA1 hash (https://otx.alienvault.com/pulse/", $md5hashes{$md5sum}{'pulse'}, "/) in ${file}");
+	return 1;
+      }
+    }
+  }
+  print "OK: No malicious hash identified in $file\n";
+  syslog ('notice', "OK: No malicious hash identified in ${file}");
+  closelog ();
+}
+
+my $returncode = 0;
+if ($inputdir) {
+  opendir (DIR, $inputdir) or die $!;
+  while (my $file = readdir(DIR)) {
+    if ($file ne '.' && $file ne '..') {
+      $returncode = &checkfile ("${inputdir}/${file}");
+    }
+  }
+  close DIR;
+} elsif ($inputfilename) {
+  $returncode = &checkfile ($inputfilename);
+}
+
+exit $returncode;
