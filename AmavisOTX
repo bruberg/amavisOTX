@@ -5,18 +5,13 @@ use warnings;
 use Sys::Syslog;
 use Digest::file qw (digest_file_hex);
 
-
-use vars qw ($argument $inputfilename $inputdir);
-
 my $hashfilename = "/var/tmp/known_hashes.txt";
 
 my $inputfile = "";
-# $inputdir = "";
-# $inputfilename = "";
 
 if (@ARGV) {
   if ($ARGV[0]) {
-    $argument = $ARGV[0];
+    my $argument = $ARGV[0];
     if (-d $argument) {
       $inputfile = $argument;
     } elsif (-f $argument) {
@@ -31,18 +26,18 @@ if (@ARGV) {
 }
 
 sub read_datafile {
-    my ($hashfilename) = @_;
-    open(HASHES, "<", $hashfilename) || die("Unable to read $hashfilename: $!");
-    my %resulthash;    
-    while( my $line = <HASHES>) {
-	chomp($line);
-	my ($hashtype, $hash, $pulse ) = split (/:/, $line);
-	$resulthash{$hashtype}->{$hash} = $pulse;
-    }
-    my @stat = stat(HASHES);
-    $resulthash{'mtime'} = $stat[9];
-    close(HASHES);
-    return %resulthash;
+  my ($hashfilename) = @_;
+  open(HASHES, "<", $hashfilename) || die("Unable to read $hashfilename: $!");
+  my %resulthash;    
+  while( my $line = <HASHES>) {
+    chomp($line);
+    my ($hashtype, $hash, $pulse ) = split (/:/, $line);
+    $resulthash{$hashtype}->{$hash} = $pulse;
+  }
+  my @stat = stat(HASHES);
+  $resulthash{'mtime'} = $stat[9];
+  close(HASHES);
+  return %resulthash;
 }
 
 sub checkfile {
@@ -76,7 +71,7 @@ sub checkfile {
 my $returncode = 0;
 
 # Read hashes
-my %hashes = read_datafile $hashfilename or die ("Can't construct hashes");
+my %hashes = read_datafile ($hashfilename) or die ("Can't construct hashes");
 
 # Open syslog channel
 openlog ("AmavisOTX[$$]", 'ndelay', 'mail');
@@ -98,4 +93,3 @@ if (-d $inputfile) {
 closelog ();
 
 exit $returncode;
-

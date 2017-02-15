@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import argparse
 import os
 import sys
 
@@ -8,8 +9,19 @@ from OTXv2 import OTXv2
 from datetime import datetime, timedelta
 import IndicatorTypes
 
+def getArgs():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--key", required=True,help="Your OTX API key (https://otx.alienvault.com/api)")
+    parser.add_argument("--days", required=False,type=int,default=14,help="Data age (in days)")
+    parser.add_argument("--destination-directory", "-dd", required=False, type=argparse.FileType('w'),
+                        help="The destination directory for the generated file")
+    return parser.parse_args()
+
+
+args = getArgs()
+
 # Add your own OTX API key within the quotes on the next line.
-otx = OTXv2("")
+otx = OTXv2(api_key=args.key)
 
 # This is the file where the hashes are stored.
 # If you change this, remember to change the Perl script as well.
@@ -19,7 +31,7 @@ hash_file = '/var/tmp/known_hashes.txt'
 
 
 # --- You should not need to edit anything below here. ---
-mtime = (datetime.now() - timedelta(days=31)).isoformat()
+mtime = (datetime.now() - timedelta(days=args.days)).isoformat()
 
 hash_list = []
 
