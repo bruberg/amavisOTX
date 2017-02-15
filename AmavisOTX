@@ -6,7 +6,6 @@ use Sys::Syslog;
 use Digest::file qw (digest_file_hex);
 
 my $hashfilename = "/var/tmp/known_hashes.txt";
-
 my $inputfile = "";
 
 if (@ARGV) {
@@ -27,16 +26,16 @@ if (@ARGV) {
 
 sub read_datafile {
   my ($hashfilename) = @_;
-  open(HASHES, "<", $hashfilename) || die("Unable to read $hashfilename: $!");
+  open (HASHES, "<", $hashfilename) || die ("Unable to read $hashfilename: $!");
   my %resulthash;    
-  while( my $line = <HASHES>) {
-    chomp($line);
-    my ($hashtype, $hash, $pulse ) = split (/:/, $line);
+  while (my $line = <HASHES>) {
+    chomp ($line);
+    my ($hashtype, $hash, $pulse) = split (/:/, $line);
     $resulthash{$hashtype}->{$hash} = $pulse;
   }
-  my @stat = stat(HASHES);
+  my @stat = stat (HASHES);
   $resulthash{'mtime'} = $stat[9];
-  close(HASHES);
+  close (HASHES);
   return %resulthash;
 }
 
@@ -93,3 +92,4 @@ if (-d $inputfile) {
 closelog ();
 
 exit $returncode;
+
