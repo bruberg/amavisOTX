@@ -2,27 +2,27 @@
 
 use strict;
 use warnings;
-use POSIX qw(strftime);
 use Sys::Syslog;
 use Digest::file qw (digest_file_hex);
 
 
-use vars qw ($argument $inputfilename $inputdir $hashfilename);
+use vars qw ($argument $inputfilename $inputdir);
 
-$hashfilename = "/var/tmp/known_hashes.txt";
+my $hashfilename = "/var/tmp/known_hashes.txt";
 
-$inputdir = "";
-$inputfilename = "";
+my $inputfile = "";
+# $inputdir = "";
+# $inputfilename = "";
 
 if (@ARGV) {
   if ($ARGV[0]) {
     $argument = $ARGV[0];
     if (-d $argument) {
-      $inputdir = $argument;
+      $inputfile = $argument;
     } elsif (-f $argument) {
-      $inputfilename = $argument;
+      $inputfile = $argument;
     }
-    exit 2 unless (-f $inputfilename or -d $inputdir);
+    exit 2 unless (-f $inputfile or -d $inputfile);
   }
 } else {
   print "Usage: $0 file_or_directory_to_check\n";
@@ -31,39 +31,42 @@ if (@ARGV) {
 }
 
 sub read_datafile {
-  my ($hashfilename) = @_;
-  open(HASHES, "<", $hashfilename) || die ("Unable to read $hashfilename: $!");
-  my %md5hashes;
-  my %sha1hashes;
-  while (my $line = <HASHES>) {
-    chomp ($line);
-    my ($hashtype, $hash, $pulse ) = split (/:/, $line);
-    if ('{$MD5}' eq $hashtype) {
-      $md5hashes{$hash}=$pulse;
-    } elsif ('{SHA1}' eq $hashtype) {
-      $sha1hashes{$hash}=$pulse;
+    my ($hashfilename) = @_;
+    open(HASHES, "<", $hashfilename) || die("Unable to read $hashfilename: $!");
+    my %resulthash;    
+    while( my $line = <HASHES>) {
+	chomp($line);
+	my ($hashtype, $hash, $pulse ) = split (/:/, $line);
+	$resulthash{$hashtype}->{$hash} = $pulse;
     }
-  }
-  close (HASHES);
-  return (\%md5hashes, \%sha1hashes);
+    my @stat = stat(HASHES);
+    $resulthash{'mtime'} = $stat[9];
+    close(HASHES);
+    return %resulthash;
 }
 
-sub checkfile () {
-  my ($file, %md5hashes, %sha1hashes) = @_;
+sub checkfile {
+  my ($file, %hashes) = @_;
   if (-f $file && -r $file && -s $file) {
     my $md5sum = digest_file_hex ($file, 'MD5');
-    if ($md5hashes{$md5sum}) {
-      print "Found hash from https://otx.alienvault.com/pulse/", $md5hashes{$md5sum}, "/ in ${file}\n";
-      syslog ('notice', "Found MD5 hash (https://otx.alienvault.com/pulse/", $md5hashes{$md5sum}, "/) in ${file}");
+    # print "DEBUG: $file -> $md5sum\n";
+    if ($hashes{'MD5'}{$md5sum}) {
+      print "Found hash from https://otx.alienvault.com/pulse/", $hashes{'MD5'}{$md5sum}, "/ in ${file}\n";
+      syslog ('notice', "Found MD5 hash (https://otx.alienvault.com/pulse/", $hashes{'MD5'}{$md5sum}, "/) in ${file}");
       return 1;
     } else {
       my $sha1sum = digest_file_hex ($file, 'SHA-1');
-      if ($sha1hashes{$sha1sum}) {
-	print "Found hash from https://otx.alienvault.com/pulse/", $sha1hashes{$sha1sum}, "/ in ${file}\n";
-	syslog ('notice', "Found SHA1 hash (https://otx.alienvault.com/pulse/", $md5hashes{$md5sum}, "/) in ${file}");
+      # print "DEBUG: $file -> $sha1sum\n";
+      if ($hashes{'SHA1'}{$sha1sum}) {
+	print "Found hash from https://otx.alienvault.com/pulse/", $hashes{'SHA1'}{$sha1sum}, "/ in ${file}\n";
+	syslog ('notice', "Found SHA1 hash (https://otx.alienvault.com/pulse/", $hashes{'SHA1'}{$sha1sum}, "/) in ${file}");
 	return 1;
       }
     }
+  } else {
+    # File not readable, size 0, or otherwise unusable
+    # print "DEBUG: Skipping file $file\n";
+    return 0;
   }
   print "OK: No malicious hash identified in $file\n";
   syslog ('notice', "OK: No malicious hash identified in ${file}");
@@ -73,25 +76,26 @@ sub checkfile () {
 my $returncode = 0;
 
 # Read hashes
-my (%md5hashes, %sha1hashes) = read_datafile ($hashfilename);
+my %hashes = read_datafile $hashfilename or die ("Can't construct hashes");
 
 # Open syslog channel
 openlog ("AmavisOTX[$$]", 'ndelay', 'mail');
 
 # Read input file or directory that should be checked
-if ($inputdir) {
-  opendir (DIR, $inputdir) or die $!;
+if (-d $inputfile) {
+  opendir (DIR, $inputfile) or die $!;
   while (my $file = readdir(DIR)) {
     if ($file ne '.' && $file ne '..') {
-      $returncode = checkfile ("${inputdir}/${file}", %md5hashes, %sha1hashes);
+      $returncode = checkfile ("${inputfile}/${file}", %hashes);
     }
   }
   close DIR;
-} elsif ($inputfilename) {
-  $returncode = &checkfile ($inputfilename, %md5hashes, %sha1hashes);
+} elsif (-f $inputfile) {
+  $returncode = &checkfile ($inputfile, %hashes);
 }
 
 # Close syslog channel
 closelog ();
 
 exit $returncode;
+
