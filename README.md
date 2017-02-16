@@ -8,5 +8,6 @@ Add it to Amavis in the @av_scanners array:
       '{}',
       qr/^OK/m,
       qr/^Found (hash .*) from (?:https:\/\/.*) in (?:.*)$/m,
+      qr/^Found (hash .*) from (?:https:\/\/.*) in (?:.*)$/m,
     ],
 
