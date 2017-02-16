@@ -45,15 +45,17 @@ sub checkfile {
     my $md5sum = digest_file_hex ($file, 'MD5');
     # print "DEBUG: $file -> $md5sum\n";
     if ($hashes{'MD5'}{$md5sum}) {
-      print "Found hash from https://otx.alienvault.com/pulse/", $hashes{'MD5'}{$md5sum}, "/ in ${file}\n";
-      syslog ('notice', "Found MD5 hash (https://otx.alienvault.com/pulse/", $hashes{'MD5'}{$md5sum}, "/) in ${file}");
+      my $msg = "Found hash " . $md5sum . " from https://otx.alienvault.com/pulse/" . $hashes{'MD5'}{$md5sum} . "/ in ${file}";
+      print $msg, "\n";
+      syslog ('notice', $msg);
       return 1;
     } else {
       my $sha1sum = digest_file_hex ($file, 'SHA-1');
       # print "DEBUG: $file -> $sha1sum\n";
       if ($hashes{'SHA1'}{$sha1sum}) {
-	print "Found hash from https://otx.alienvault.com/pulse/", $hashes{'SHA1'}{$sha1sum}, "/ in ${file}\n";
-	syslog ('notice', "Found SHA1 hash (https://otx.alienvault.com/pulse/", $hashes{'SHA1'}{$sha1sum}, "/) in ${file}");
+        my $msg = "Found hash " . $sha1sum . " from https://otx.alienvault.com/pulse/" . $hashes{'SHA1'}{$md5sum} . "/ in ${file}";
+        print $msg, "\n";
+        syslog ('notice', $msg);
 	return 1;
       }
     }
