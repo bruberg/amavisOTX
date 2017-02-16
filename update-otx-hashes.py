@@ -35,11 +35,13 @@ for pulse in otx.getsince(mtime):
     for indicator in pulse["indicators"]:
         type_ = indicator["type"]
         if type_ == IndicatorTypes.FILE_HASH_MD5.name:
-            string='MD5:'+indicator["indicator"]+':'+pulse['id']
-            hash_list.append(string)
+            if indicator["indicator"] != 'd41d8cd98f00b204e9800998ecf8427e':
+                string='MD5:'+indicator["indicator"]+':'+pulse['id']
+                hash_list.append(string)
         if type_ == IndicatorTypes.FILE_HASH_SHA1.name:
-            string='SHA1:'+indicator["indicator"]+':'+pulse['id']
-            hash_list.append(string)
+            if indicator["indicator"] != 'da39a3ee5e6b4b0d3255bfef95601890afd80709':
+                string='SHA1:'+indicator["indicator"]+':'+pulse['id']
+                hash_list.append(string)
 
 f = open(hash_file, 'w')
 for hash in hash_list:
