@@ -2,11 +2,14 @@
 
 use strict;
 use warnings;
+use File::Copy;
 use Sys::Syslog;
 use Digest::file qw (digest_file_hex);
+use File::Basename;
 
 my $hashfilename = "/var/tmp/known_hashes.txt";
 my $inputfile = "";
+my $debug = 0;
 
 if (@ARGV) {
   if ($ARGV[0]) {
@@ -42,22 +45,37 @@ sub read_datafile {
 sub checkfile {
   my ($file, %hashes) = @_;
   if (-f $file && -r $file && -s $file) {
-    my $md5sum = digest_file_hex ($file, 'MD5');
-    # print "DEBUG: $file -> $md5sum\n";
-    if ($hashes{'MD5'}{$md5sum}) {
-      my $msg = "Found hash " . $md5sum . " from https://otx.alienvault.com/pulse/" . $hashes{'MD5'}{$md5sum} . "/ in ${file}";
-      print $msg, "\n";
-      syslog ('notice', $msg);
-      return 1;
-    } else {
-      my $sha1sum = digest_file_hex ($file, 'SHA-1');
-      # print "DEBUG: $file -> $sha1sum\n";
-      if ($hashes{'SHA1'}{$sha1sum}) {
-        my $msg = "Found hash " . $sha1sum . " from https://otx.alienvault.com/pulse/" . $hashes{'SHA1'}{$md5sum} . "/ in ${file}";
-        print $msg, "\n";
-        syslog ('notice', $msg);
+    my $size = (stat ($file))[7];
+    # False positives on small files. Don't bother with files under 100 bytes.
+    if ($size > 100) {
+      my $md5sum = digest_file_hex ($file, 'MD5');
+      # print "DEBUG: $file -> $md5sum\n";
+      if ($hashes{'MD5'}{$md5sum}) {
+	my $msg = "Found hash " . $md5sum . " from https://otx.alienvault.com/pulse/" . $hashes{'MD5'}{$md5sum} . "/ in ${file}";
+	print $msg, "\n";
+	syslog ('notice', $msg);
+        if ($debug) {
+    	  my $dstfile = "/tmp/" . basename ($file) . "." . $$;
+  	  copy ("${file}", $dstfile) or die "Copy failed: $!";
+        }
 	return 1;
+      } else {
+	my $sha1sum = digest_file_hex ($file, 'SHA-1');
+	# print "DEBUG: $file -> $sha1sum\n";
+	if ($hashes{'SHA1'}{$sha1sum}) {
+	  my $msg = "Found hash " . $sha1sum . " from https://otx.alienvault.com/pulse/" . $hashes{'SHA1'}{$md5sum} . "/ in ${file}";
+	  print $msg, "\n";
+	  syslog ('notice', $msg);
+          if ($debug) {
+	    my $dstfile = "/tmp/" . basename ($file) . "." . $$;
+	    copy ("${file}", $dstfile) or die "Copy failed: $!";
+          }
+	  return 1;
+	}
       }
+    } else {
+      print "DEBUG: file too small to bother\n";
+      return 0;
     }
   } else {
     # File not readable, size 0, or otherwise unusable
